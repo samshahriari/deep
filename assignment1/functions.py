@@ -10,7 +10,7 @@ def softmax(x):
 def LoadBatch(filename):
     """ Copied from the dataset website """
     import pickle
-    with open('Datasets/cifar-10-batches-py/'+filename, 'rb') as fo:
+    with open('../Datasets/cifar-10-batches-py/'+filename, 'rb') as fo:
         dict = pickle.load(fo, encoding='bytes')
     return dict
 

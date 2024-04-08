@@ -1,4 +1,5 @@
 # from functions import *
+from matplotlib import pyplot as plt
 import numpy as np
 
 
@@ -38,11 +39,14 @@ def evaluateClassifier(X: np.ndarray, W: np.ndarray, b) -> np.ndarray:
     return p
 
 
+def computeLoss(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_):
+    p = evaluateClassifier(X, W, b)
+    return np.sum(-Y * np.log(p))/X.shape[1]
+
+
 # vi vill minimera kostnaden för att få så bra parametrar som möjligt
 def computeCost(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_) -> float:
-    p = evaluateClassifier(X, W, b)
-    J = np.sum(-Y * np.log(p))/X.shape[1] + lambda_ * np.sum(W**2)  # want to multiply element wise
-    return J
+    return computeLoss(X, Y, W, b, lambda_) + lambda_ * np.sum(W**2)  # want to multiply element wise
 
 
 def computeAccuracy(X, y, W, b):
@@ -101,15 +105,62 @@ def evaluateGradient(X, Y, W, b):
                 print("SLOW b", "rel wrong", np.sum(rel_slow_b > threshold), "biggest error", np.max(rel_slow_b))
 
 
-def main():
-    X, Y, y = loadBatchNP("data_batch_1")
+def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
+    import matplotlib.pyplot as plt
+    cost_training = []
+    cost_test = []
+    loss_training = []
+    loss_test = []
+    for epoch in range(n_epochs):
+        ind = np.random.permutation(NUM_IMAGES)
+        # print(M[:, ind[:3]])
+        for j in range(0, NUM_IMAGES, n_batch):
+            j_start = j
+            j_end = j+n_batch
+            X_batch = X[:, ind[j_start:j_end]]
+            Y_batch = Y[:, ind[j_start:j_end]]
+            P_batch = evaluateClassifier(X_batch, W, b)
+            grad_W, grad_b = computeGradients(X_batch, Y_batch, P_batch, W, b, lambda_)
+            W -= eta*grad_W
+            b -= eta*grad_b
+        # print("epoch", epoch, ", cost", computeCost(X, Y, W, b, lambda_))
+        cost_training.append(computeCost(X, Y, W, b, lambda_))
+        cost_test.append(computeCost(X_test, Y_test, W, b, lambda_))
+        loss_training.append(computeLoss(X, Y, W, b, lambda_))
+        loss_test.append(computeLoss(X_test, Y_test, W, b, lambda_))
+    plt.plot(cost_training, label="cost training")
+    plt.plot(loss_training, label="loss training", linestyle=(0, (5, 10)))
+    plt.plot(cost_test, label="cost validation")
+    plt.plot(loss_test, label="loss validation", linestyle=(0, (5, 10)))
+    plt.xlabel('Epoch')
+    plt.ylabel('Cost')
+    plt.legend()
+    plt.title(f"n_batch={n_batch}, eta={eta}, n_epochs={n_epochs}, lambda={lambda_}")
+    plt.grid(True)
+    # plt.show()
 
-    X = preProcess(X)
+    return W, b
+
+
+def main():
+    X_train, Y_train, y_train = loadBatchNP("data_batch_1")
+    X_val, Y_val, y_val = loadBatchNP("data_batch_2")
+    X_test, Y_test, y_test = loadBatchNP("test_batch")
+
+    X_train = preProcess(X_train)
+    X_val = preProcess(X_val)
+    X_test = preProcess(X_test)
 
     # montage(X.T)
 
-    W = 0.01*np.random.randn(NUM_CLASSES, DIMENSION)
-    b = 0.01*np.random.randn(NUM_CLASSES, 1)
+    W1 = 0.01*np.random.randn(NUM_CLASSES, DIMENSION)
+    b1 = 0.01*np.random.randn(NUM_CLASSES, 1)
+    W2 = 0.01*np.random.randn(NUM_CLASSES, DIMENSION)
+    b2 = 0.01*np.random.randn(NUM_CLASSES, 1)
+    W3 = 0.01*np.random.randn(NUM_CLASSES, DIMENSION)
+    b3 = 0.01*np.random.randn(NUM_CLASSES, 1)
+    W4 = 0.01*np.random.randn(NUM_CLASSES, DIMENSION)
+    b4 = 0.01*np.random.randn(NUM_CLASSES, 1)
 
     # print(X.shape)
 
@@ -117,7 +168,28 @@ def main():
 
     # print(computeAccuracy(X, y, W, b))
 
-    evaluateGradient(X, Y, W, b)
+    # evaluateGradient(X, Y, W, b)
+
+    W1, b1 = miniBatchGD(X_train, Y_train, 100, .1, 40, W1, b1, 0, X_val, Y_val)
+    W2, b2 = miniBatchGD(X_train, Y_train, 100, .001, 40, W2, b2, 0, X_val, Y_val)
+    W3, b3 = miniBatchGD(X_train, Y_train, 100, .001, 40, W3, b3, .1, X_val, Y_val)
+    W4, b4 = miniBatchGD(X_train, Y_train, 100, .001, 40, W4, b4, 1, X_val, Y_val)
+
+    print("W1 train", computeAccuracy(X_train, y_train, W1, b1))
+    print("W2 train", computeAccuracy(X_train, y_train, W2, b2))
+    print("W3 train", computeAccuracy(X_train, y_train, W3, b3))
+    print("W4 train", computeAccuracy(X_train, y_train, W4, b4))
+
+    print("W1 test", computeAccuracy(X_test, y_test, W1, b1))
+    print("W2 test", computeAccuracy(X_test, y_test, W2, b2))
+    print("W3 test", computeAccuracy(X_test, y_test, W3, b3))
+    print("W4 test", computeAccuracy(X_test, y_test, W4, b4))
+
+    from functions import montage
+    montage(W1)
+    montage(W2)
+    montage(W3)
+    montage(W4)
 
 
 if __name__ == "__main__":

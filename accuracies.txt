@@ -1,0 +1,8 @@
+W1 train 0.4226
+W2 train 0.4557
+W3 train 0.4508
+W4 train 0.4009
+W1 test 0.2887
+W2 test 0.3908
+W3 test 0.3935
+W4 test 0.3738

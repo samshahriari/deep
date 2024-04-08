@@ -1,0 +1,129 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[default,scale=0.95]{opensans}
+\usepackage[labelfont=bf]{caption}
+
+
+\usepackage{import}
+\usepackage{pgf}
+\usepackage{float}
+
+\usepackage{adjustbox}
+\usepackage{fancyhdr}
+\usepackage{url}
+\usepackage{fancyvrb}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={Overleaf Example},
+    pdfpagemode=FullScreen,
+    }
+
+\def\myname{Sam Shahriari}
+\def\assignment{Assignment 1}
+\def\course{DD2424}
+
+
+
+\author{Sam Shahriari}
+\title{\course: \assignment}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\myname}
+\chead{\assignment}
+\lhead{\course}
+\cfoot{ - \thepage \ -}
+\renewcommand{\headrulewidth}{.1pt}
+
+
+\begin{document}
+\maketitle
+\section{Gradients}
+To check that my analytical calculation of the gradient was correct, I compared it to a numerical estimation for the same points and features. The numerical estimation was calculated by the given function\texttt{ComputeGrads\-NumSlow()} which uses centered difference formula. The batches tested were all possible combinations of featureSize $\in \{20, 500, 3072\}$, batchSize $\in\{1, 10, 100\}$ and $\lambda \in \{0,.1,1\}$. None of the absolute errors were above $10^{-6}$ and therefore I draw the conclusion that my implementation is correct.
+More detailed results of the testing can be found in appendix \ref{gradientData}.
+
+
+\newpage
+\section{Mini-Batch Descent}
+
+\subsection{lambda=0, n epochs=40, n batch=100, eta=.1}
+Accuracy on training set is 0.4226 and on test 0.2887.
+
+\begin{figure}[H]
+
+    \import{./ResultPics}{graph1.pgf}
+\end{figure}
+
+\begin{adjustbox}{clip,trim=0cm 4cm 3cm 5cm}
+
+    \import{./ResultPics}{W1.pgf}
+\end{adjustbox}
+
+
+\newpage
+
+\subsection{lambda=0, n epochs=40, n batch=100, eta=.001}
+Accuracy on training set is 0.4557 and on test 0.3908.
+
+
+\begin{figure}[h!]
+
+    \import{./ResultPics}{graph2.pgf}
+\end{figure}
+
+\begin{adjustbox}{clip,trim=0cm 4cm 3cm 5cm}
+
+    \import{./ResultPics}{W2.pgf}
+\end{adjustbox}
+
+\newpage
+
+\subsection{lambda=.1, n epochs=40, n batch=100, eta=.001}
+Accuracy on training set is 0.4508 and on test 0.3935.
+
+\begin{figure}[h!]
+
+    \import{./ResultPics}{graph3.pgf}
+\end{figure}
+
+\begin{adjustbox}{clip,trim=0cm 4cm 3cm 5cm}
+
+    \import{./ResultPics}{W3.pgf}
+\end{adjustbox}
+
+\newpage
+
+\subsection{lambda=1, n epochs=40, n batch=100, eta=.001}
+Accuracy on training set is 0.4009 and on test 0.3738.
+
+
+\begin{figure}[h!]
+
+    \import{./ResultPics}{graph4.pgf}
+\end{figure}
+
+\begin{adjustbox}{clip,trim=0cm 4cm 3cm 5cm}
+
+    \import{./ResultPics}{W4.pgf}
+\end{adjustbox}
+\newpage
+\subsection{Commentary}
+From the results we see that the learning rate choice is very important when it comes to have a decrease in the cost function. When taking a too big of a step, we sometimes overshoot and therefore increase the cost function, leading to a worse predicting model. This almost never happened when taking smaller steps.
+The test result on the model with .1 learning rate had 10 percentage points lower accuracy compared to the models with .001 of a learning rate.
+
+The amount of regularization is a good example of the bias-variance tradeoff. When we increase lambda, we initially see a slight increase in accuracy that is then later decreased to be worse than without regularization when lambda is increased more. So without regularization we might overfit the model but with too much regularization we instead underfit the model.
+
+\newpage
+\appendix
+\section{Gradients}
+\label{gradientData}
+\VerbatimInput{evaluate_gradient.txt}
+
+
+\end{document}
+

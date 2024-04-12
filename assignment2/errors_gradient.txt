@@ -1,0 +1,56 @@
+59525.38854020194
+0.1018
+------
+num features: 20 , batch size: 1 , lambda:  0
+SLOW W abs wrong 0 biggest error 2.4892828250078214e-10
+SLOW W rel wrong 0 biggest error 1.4533802739282618e-08
+SLOW b abs wrong 0 biggest error 6.958188192296433e-11
+SLOW b rel wrong 0 biggest error 3.4129318763622067e-10
+------
+num features: 20 , batch size: 1 , lambda:  0.1
+SLOW W abs wrong 0 biggest error 4.316231330681042e-10
+SLOW W rel wrong 0 biggest error 2.7179142571849796e-09
+SLOW b abs wrong 0 biggest error 6.958188192296433e-11
+SLOW b rel wrong 0 biggest error 3.4129318763622067e-10
+------
+num features: 20 , batch size: 1 , lambda:  1
+SLOW W abs wrong 0 biggest error 1.4254555591453055e-09
+SLOW W rel wrong 0 biggest error 9.170683667909907e-10
+SLOW b abs wrong 0 biggest error 6.415323966502129e-10
+SLOW b rel wrong 0 biggest error 3.1466616103752504e-09
+------
+num features: 20 , batch size: 10 , lambda:  0
+SLOW W abs wrong 0 biggest error 4.117283293816887e-10
+SLOW W rel wrong 0 biggest error 2.4653246494206414e-08
+SLOW b abs wrong 0 biggest error 3.1131446032173216e-10
+SLOW b rel wrong 0 biggest error 1.4792496788051695e-09
+------
+num features: 20 , batch size: 10 , lambda:  0.1
+SLOW W abs wrong 0 biggest error 5.233947858451771e-10
+SLOW W rel wrong 0 biggest error 3.4908850003620592e-09
+SLOW b abs wrong 0 biggest error 3.1131446032173216e-10
+SLOW b rel wrong 0 biggest error 1.4792496788051695e-09
+------
+num features: 20 , batch size: 10 , lambda:  1
+SLOW W abs wrong 0 biggest error 1.805463070714275e-09
+SLOW W rel wrong 0 biggest error 1.1683430450338027e-09
+SLOW b abs wrong 0 biggest error 8.080397739806955e-10
+SLOW b rel wrong 0 biggest error 3.83950226689584e-09
+------
+num features: 20 , batch size: 100 , lambda:  0
+SLOW W abs wrong 0 biggest error 5.002005569725715e-10
+SLOW W rel wrong 0 biggest error 3.516490864551905e-08
+SLOW b abs wrong 0 biggest error 2.42636927910711e-10
+SLOW b rel wrong 0 biggest error 1.9957499952210056e-09
+------
+num features: 20 , batch size: 100 , lambda:  0.1
+SLOW W abs wrong 0 biggest error 5.088013725618179e-10
+SLOW W rel wrong 0 biggest error 3.3926608475673607e-09
+SLOW b abs wrong 0 biggest error 2.42636927910711e-10
+SLOW b rel wrong 0 biggest error 1.9957499952210056e-09
+------
+num features: 20 , batch size: 100 , lambda:  1
+SLOW W abs wrong 0 biggest error 1.6478069464476164e-09
+SLOW W rel wrong 0 biggest error 1.0661789264572265e-09
+SLOW b abs wrong 0 biggest error 7.109335689592378e-10
+SLOW b rel wrong 0 biggest error 5.8476081075959645e-09

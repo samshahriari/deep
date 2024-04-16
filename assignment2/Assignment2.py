@@ -9,6 +9,11 @@ DIMENSION = 32*32*3  # 3072
 M_HIDDEN_NODES = 50
 np.random.seed(2424)
 
+eta_min = 1e-5
+eta_max = 1e-1
+n_s = 500
+batch_size = 100
+
 
 def loadBatchNP(batch_name: str):
     from functions import LoadBatch
@@ -147,6 +152,78 @@ def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
     return W, b
 
 
+def miniBatchGDCyclic(X, Y, y, W, b, lambda_, X_test, Y_test, y_test, l_cycles, n_s, plot=False):
+
+    eta_min = 1e-5
+    eta_max = 1e-1
+    batch_size = 100
+    cost_training = []
+    cost_test = []
+    loss_training = []
+    loss_test = []
+    accuracy_training = []
+    accuracy_test = []
+    x_axes = []
+    eta = eta_min
+    l = 0
+    t = 0
+    # for epoch in range(n_epochs):
+    while l < l_cycles:
+        ind = np.random.permutation(X.shape[1])
+        # print(M[:, ind[:3]])
+        for j in range(0, X.shape[1], batch_size):
+            if 2*l*n_s <= t and t <= (2*l+1)*n_s:
+                eta = eta_min + (t-2*l*n_s)/n_s*(eta_max-eta_min)
+            else:
+                eta = eta_max - (t-(2*l+1)*n_s)/n_s*(eta_max-eta_min)
+
+            j_start = j
+            j_end = j+batch_size
+            X_batch = X[:, ind[j_start:j_end]]
+            Y_batch = Y[:, ind[j_start:j_end]]
+            P_batch, H_batch = evaluateClassifier(X_batch, W, b)
+            grad_W, grad_b = computeGradients(X_batch, Y_batch, P_batch, H_batch, W, b, lambda_)
+            for i in range(len(W)):
+                W[i] -= eta*grad_W[i]
+                b[i] -= eta*grad_b[i]
+
+        # print("epoch", epoch, ", cost", computeCost(X, Y, W, b, lambda_))
+            t += 1
+            if plot and (t % (2*n_s/10) == 0 or t == 1):
+                cost_training.append(computeCost(X, Y, W, b, lambda_))
+                cost_test.append(computeCost(X_test, Y_test, W, b, lambda_))
+                loss_training.append(computeLoss(X, Y, W, b, lambda_))
+                loss_test.append(computeLoss(X_test, Y_test, W, b, lambda_))
+                accuracy_training.append(computeAccuracy(X, y, W, b))
+                accuracy_test.append(computeAccuracy(X_test, y_test, W, b))
+                x_axes.append(t)
+            if t % (2*n_s) == 0:
+                l += 1
+
+    if plot:
+        plot(x_axes, cost_training, cost_test, "cost", n_s, l_cycles)
+        plot(x_axes, loss_training, loss_test, "loss", n_s, l_cycles)
+        plot(x_axes, accuracy_training, accuracy_test, "accuracy", n_s, l_cycles)
+
+    return W, b
+
+
+def plot(x, y_train, y_val, title: str, n_s, l):
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
+    plt.clf()
+    plt.grid(True)
+    plt.gca().xaxis.set_major_locator(MultipleLocator(n_s/2))
+    plt.xlabel('update step')
+    plt.ylabel(title)
+    plt.plot(x, y_train, label=f"{title} training")
+    plt.plot(x, y_val, label=f"{title} validation")
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.title(f"{title.capitalize()} plot")
+    plt.savefig(f'results/{l}-{n_s}{title}.pgf')
+
+
 def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
     W1 = 1/np.sqrt(dim)*np.random.randn(m, dim)
     b1 = np.zeros((m, 1))
@@ -175,10 +252,12 @@ def main():
 
     print(computeAccuracy(X_train, y_train, W, b))
 
-    evaluateGradient(X_train, Y_train, W, b)
-    W, b = miniBatchGD(X_train[:, :100], Y_train[:, :100], 100, 0.01, 200, W, b, 0, X_val, Y_val)
-
-    # print(computeAccuracy(X_train, y_train, W, b))
+    # evaluateGradient(X_train, Y_train, W, b)
+    # W, b = miniBatchGD(X_train[:, :100], Y_train[:, :100], 100, 0.01, 200, W, b, 0, X_val, Y_val)
+    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, W, b, .01, X_test, Y_test, y_test, 1, 500)
+    W, b = initialize_weight_bias()
+    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, W, b, .01, X_test, Y_test, y_test, 3, 800)
+    print(computeAccuracy(X_train, y_train, W, b))
 
 
 if __name__ == "__main__":

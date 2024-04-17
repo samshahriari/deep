@@ -15,7 +15,7 @@ n_s = 500
 batch_size = 100
 
 
-def loadBatchNP(batch_name: str):
+def loadBatchNP(batch_name: str) -> list[np.ndarray, np.ndarray, np.ndarray]:
     from functions import LoadBatch
     """
     - X is d*n
@@ -29,6 +29,17 @@ def loadBatchNP(batch_name: str):
     for i, k in enumerate(y):
         Y[k, i] = 1
     return X, Y, y
+
+
+def loadAllTrainingData():
+    X, Y, y = loadBatchNP("data_batch_1")
+    for i in range(2, 6):
+        X_new, Y_new, y_new = loadBatchNP(f"data_batch_{i}")
+        X = np.concatenate((X, X_new), axis=1)
+        Y = np.concatenate((Y, Y_new), axis=1)
+        y = np.concatenate((y, y_new))
+    ind = np.random.permutation(X.shape[1])
+    return preProcess(X[:, ind[5000:]]), Y[:, ind[5000:]], y[ind[5000:]], preProcess(X[:, ind[:5000]]), Y[:, ind[:5000]], y[ind[:5000]]
 
 
 def preProcess(X: np.ndarray) -> np.ndarray:
@@ -152,17 +163,19 @@ def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
     return W, b
 
 
-def miniBatchGDCyclic(X, Y, y, W, b, lambda_, X_test, Y_test, y_test, l_cycles, n_s, plot=False):
+def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=None, b=None, plotFig=False):
+    if W == None:
+        W, b = initialize_weight_bias()
 
     eta_min = 1e-5
     eta_max = 1e-1
     batch_size = 100
     cost_training = []
-    cost_test = []
+    cost_val = []
     loss_training = []
-    loss_test = []
+    loss_val = []
     accuracy_training = []
-    accuracy_test = []
+    accuracy_val = []
     x_axes = []
     eta = eta_min
     l = 0
@@ -189,21 +202,21 @@ def miniBatchGDCyclic(X, Y, y, W, b, lambda_, X_test, Y_test, y_test, l_cycles, 
 
         # print("epoch", epoch, ", cost", computeCost(X, Y, W, b, lambda_))
             t += 1
-            if plot and (t % (2*n_s/10) == 0 or t == 1):
+            if plotFig and (t % (2*n_s/10) == 0 or t == 1):
                 cost_training.append(computeCost(X, Y, W, b, lambda_))
-                cost_test.append(computeCost(X_test, Y_test, W, b, lambda_))
+                cost_val.append(computeCost(X_val, Y_val, W, b, lambda_))
                 loss_training.append(computeLoss(X, Y, W, b, lambda_))
-                loss_test.append(computeLoss(X_test, Y_test, W, b, lambda_))
+                loss_val.append(computeLoss(X_val, Y_val, W, b, lambda_))
                 accuracy_training.append(computeAccuracy(X, y, W, b))
-                accuracy_test.append(computeAccuracy(X_test, y_test, W, b))
+                accuracy_val.append(computeAccuracy(X_val, y_val, W, b))
                 x_axes.append(t)
             if t % (2*n_s) == 0:
                 l += 1
 
-    if plot:
-        plot(x_axes, cost_training, cost_test, "cost", n_s, l_cycles)
-        plot(x_axes, loss_training, loss_test, "loss", n_s, l_cycles)
-        plot(x_axes, accuracy_training, accuracy_test, "accuracy", n_s, l_cycles)
+    if plotFig:
+        plot(x_axes, cost_training, cost_val, "cost", n_s, l_cycles)
+        plot(x_axes, loss_training, loss_val, "loss", n_s, l_cycles)
+        plot(x_axes, accuracy_training, accuracy_val, "accuracy", n_s, l_cycles)
 
     return W, b
 
@@ -222,6 +235,7 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     plt.ylim(bottom=0)
     plt.title(f"{title.capitalize()} plot")
     plt.savefig(f'results/{l}-{n_s}{title}.pgf')
+    plt.show()
 
 
 def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
@@ -234,30 +248,36 @@ def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
     return W, b
 
 
-def main():
-    X_train, Y_train, y_train = loadBatchNP("data_batch_1")
-    X_val, Y_val, y_val = loadBatchNP("data_batch_2")
-    X_test, Y_test, y_test = loadBatchNP("test_batch")
+def lambdaSearch(l_min, l_max, testing_points, cycles):
+    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    n_batch = 100
+    n_s = 2 * np.floor(X_train.shape[1]/n_batch)
+    l = l_min + (l_max - l_min) * np.random.rand(testing_points)
+    lambdas = np.power(10, l)
 
-    X_train = preProcess(X_train)
-    X_val = preProcess(X_val)
+    res = []
+    for lambda_ in lambdas:
+
+        W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, cycles, n_s)
+        acc = computeAccuracy(X_val, y_val, W, b)
+        res.append((acc, lambda_))
+    res.sort(reverse=True)
+    for (acc, lam) in res:
+        print("Accuracy", acc, "lambda", lam, "log lambda", np.log10(lam))
+    return res[0][1]
+
+
+def main():
+    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    X_test, Y_test, y_test = loadBatchNP("test_batch")
     X_test = preProcess(X_test)
 
-    # montage(X.T)
-    W, b = initialize_weight_bias()
-
-    # print(X.shape)
-
-    print(computeCost(X_train, Y_train, W, b, 1000))
-
-    print(computeAccuracy(X_train, y_train, W, b))
-
-    # evaluateGradient(X_train, Y_train, W, b)
-    # W, b = miniBatchGD(X_train[:, :100], Y_train[:, :100], 100, 0.01, 200, W, b, 0, X_val, Y_val)
-    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, W, b, .01, X_test, Y_test, y_test, 1, 500)
-    W, b = initialize_weight_bias()
-    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, W, b, .01, X_test, Y_test, y_test, 3, 800)
-    print(computeAccuracy(X_train, y_train, W, b))
+    best_lambda = lambdaSearch(-1, -5, 8, 2)
+    print(np.log10(best_lambda))
+    best_lambda = lambdaSearch(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)
+    print(np.log10(best_lambda))
+    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, best_lambda, X_val, Y_val, y_val, 3, 1800, plotFig=True)
+    print(computeAccuracy(X_test, y_test, W, b))
 
 
 if __name__ == "__main__":

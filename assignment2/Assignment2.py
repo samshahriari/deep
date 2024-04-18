@@ -226,7 +226,7 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
     plt.clf()
     plt.grid(True)
-    plt.gca().xaxis.set_major_locator(MultipleLocator(n_s/2))
+    plt.gca().xaxis.set_major_locator(MultipleLocator(n_s))
     plt.xlabel('update step')
     plt.ylabel(title)
     plt.plot(x, y_train, label=f"{title} training")
@@ -234,8 +234,9 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     plt.legend()
     plt.ylim(bottom=0)
     plt.title(f"{title.capitalize()} plot")
+    plt.savefig(f'results/{l}-{n_s}{title}.png')
     plt.savefig(f'results/{l}-{n_s}{title}.pgf')
-    plt.show()
+    # plt.show()
 
 
 def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
@@ -268,10 +269,17 @@ def lambdaSearch(l_min, l_max, testing_points, cycles):
 
 
 def main():
-    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    X_train, Y_train, y_train = loadBatchNP("data_batch_1")
+    X_val, Y_val, y_val = loadBatchNP("data_batch_2")
     X_test, Y_test, y_test = loadBatchNP("test_batch")
+    X_train = preProcess(X_train)
+    X_val = preProcess(X_val)
     X_test = preProcess(X_test)
 
+    miniBatchGDCyclic(X_train, Y_train, y_train, .01, X_val, Y_val, y_val, 1, 500, plotFig=True)
+    miniBatchGDCyclic(X_train, Y_train, y_train, .01, X_val, Y_val, y_val, 3, 800, plotFig=True)
+
+    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
     best_lambda = lambdaSearch(-1, -5, 8, 2)
     print(np.log10(best_lambda))
     best_lambda = lambdaSearch(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)

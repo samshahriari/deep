@@ -1,0 +1,143 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[default,scale=0.95]{opensans}
+\usepackage[labelfont=bf]{caption}
+
+
+\usepackage{fancyhdr}
+\usepackage{url}
+\usepackage{hyperref}
+
+\usepackage{fancyvrb}
+\usepackage{hyperref}
+\usepackage{pgf}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{graphicx}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+}
+
+
+\def\myname{Sam Shahriari}
+\def\assignment{Assignment 2}
+\def\course{DD2424}
+
+
+
+\author{Sam Shahriari}
+\title{\course: \assignment}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\myname}
+\chead{\assignment}
+\lhead{\course}
+\cfoot{ - \thepage \ -}
+\renewcommand{\headrulewidth}{.1pt}
+
+
+\begin{document}
+\setlength{\headheight}{15pt}
+\maketitle
+\section{Gradient}
+To check that my analytical calculation of the gradient was correct, I compared it to a numerical estimation for the same points and features. The numerical estimation was calculated by the given function\texttt{ComputeGrads\-NumSlow()} which uses centered difference formula. The batches tested were all possible combinations of featureSize $= 20$, batchSize $\in\{1, 10, 100\}$ and $\lambda \in \{0,.1,1\}$. None of the absolute or relative errors were above $10^{-6}$ and therefore I draw the conclusion that my implementation is correct.
+More detailed results of the testing can be found in \autoref{gradientData}.
+
+Without any regularization, it is very easy to overfit the model. This can be seen in \autoref{overfit}.
+
+\begin{figure}[H]
+    \scalebox{0.9}{\input{results/overfit.pgf}}
+    \caption{Overfitting the model}
+    \label{overfit}
+\end{figure}
+
+\section{Cyclical learning}
+A cyclical learning scheme means that we continuously change one of the hyperparameters from a min value to a max value and then back to a min value. Here we used the cyclical approach on the learning rate which changed between $\eta_{min} = 10^{-5}$ and $\eta_{max} = 10^{-1}$. The effect of varying the learning rate can be seen in \autoref{fig:one cycle} and even more clearly in \autoref{fig:three cycles}.
+
+When examining the graph it can be seen that the y-values mostly goes in the right direction but in an area close the highest learning rate they get worse. This is probably because when using a high lambda, the step might be too big so the minima is jumped over. This could be a good attribute if the loss function contains saddle points or local minimas as they then hopefully  will be skipped.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/1-500cost.png}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/1-500loss.png}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/1-500accuracy.png}
+    \end{subfigure}
+    \caption{Plots for one cycle with $n_s=500$}
+    \label{fig:one cycle}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/3-800cost.png}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/3-800loss.png}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{results/3-800accuracy.png}
+    \end{subfigure}
+    \caption{Plots for three cycles with $n_s=800$}
+    \label{fig:three cycles}
+\end{figure}
+
+\section{Search for lambda}
+To search for a good lambda value, the training set was extended. It now contained all training batches except for 5000 images that were used as the validation set.
+
+The search was a coarse search with a wide possible range of lambda. 8 random lambda values where chosen in the $\log_{10}$ range from $-1$ to $-5$. Other parameter settings were cycles$=2$, batch size$\ =100,\ n_s=900,\ \eta_{min}=10^{-5},\ \eta_{max}=10^{-1}$. The three best performing lambdas were:
+\begin{itemize}
+    \item Accuracy 0.532 lambda 7.807727344534329e-05 log lambda -4.107475361175347
+    \item Accuracy 0.5296 lambda 5.066346576621312e-05 log lambda -4.295305104485099
+    \item Accuracy 0.5294 lambda 7.193692167309888e-05 log lambda -4.143048150462331
+\end{itemize}
+
+The best lambda was then used for a finer search. Now 20 values were generated in the log range from $-4.107\pm 1$. The other hyperparameters were the same as in the coarse search. The three best performing lambdas were:
+
+\begin{itemize}
+    \item Accuracy 0.531 lambda 9.867193573189926e-06 log lambda -5.005806351787182
+    \item Accuracy 0.529 lambda 1.6403528938636582e-05 log lambda -4.785062710872495
+    \item Accuracy 0.5272 lambda 2.3557420875260744e-05 log lambda -4.627872258917016
+\end{itemize}
+
+Lastly, the best lambda $=9.867e-06$ was used to train the model. When testing the model on the test data an accuracy of $51.37\%$ was achieved. A plot of the loss function can be seen in \autoref{fig:loss} and all the lambdas and their respective accuracy can be seen in \autoref{search}.
+
+\begin{figure}[H]
+    \scalebox{0.9}{\input{results/3-1800loss.pgf}}
+    \caption{Plot of the loss function for the training and validation set with the best lambda.}
+    \label{fig:loss}
+\end{figure}
+
+\newpage
+\appendix
+\section{Gradients}
+\label{gradientData}
+\VerbatimInput{errors_gradient.txt}
+
+\section{Lambda Random Search}
+\label{search}
+\VerbatimInput{search.txt}
+
+
+
+\end{document}
+

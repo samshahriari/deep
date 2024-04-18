@@ -1,6 +1,3 @@
-59525.38854020194
-0.1018
-------
 num features: 20 , batch size: 1 , lambda:  0
 SLOW W abs wrong 0 biggest error 2.4892828250078214e-10
 SLOW W rel wrong 0 biggest error 1.4533802739282618e-08

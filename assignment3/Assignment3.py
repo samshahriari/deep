@@ -8,7 +8,8 @@ NUM_IMAGES = 10000
 DIMENSION = 32*32*3  # 3072
 M_HIDDEN_NODES = 50
 np.random.seed(2424)
-hidden_nodes_per_layer = [50, 50]
+# hidden_nodes_per_layer = [50, 50]
+hidden_nodes_per_layer = [50, 30, 20, 20, 10, 10, 10, 10]
 
 eta_min = 1e-5
 eta_max = 1e-1
@@ -243,20 +244,20 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     plt.legend()
     plt.ylim(bottom=0)
     plt.title(f"{title.capitalize()} plot")
-    plt.savefig(f'results/{l}-{n_s}{title}.png')
-    plt.savefig(f'results/{l}-{n_s}{title}.pgf')
+    plt.savefig(f'results/{l}-{n_s}-{len(hidden_nodes_per_layer)+1}-{title}.png')
+    # plt.savefig(f'results/{l}-{n_s}-{len(hidden_nodes_per_layer)+1}-{title}.pgf')
     # plt.show()
 
 
 def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
     W = []
     b = []
-    W.append(1/np.sqrt(dim)*np.random.randn(hidden_nodes_per_layer[0], dim))
+    W.append(np.sqrt(2)/np.sqrt(dim)*np.random.randn(hidden_nodes_per_layer[0], dim))
     b.append(np.zeros((hidden_nodes_per_layer[0], 1)))
     for l in range(1, len(hidden_nodes_per_layer)):
-        W.append(1/np.sqrt(hidden_nodes_per_layer[l-1]) * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
+        W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[l-1]) * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
         b.append(np.zeros((hidden_nodes_per_layer[l], 1)))
-    W.append(1/np.sqrt(hidden_nodes_per_layer[-1])*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
+    W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[-1])*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
     b.append(np.zeros((NUM_CLASSES, 1)))
     return W, b
 
@@ -281,11 +282,8 @@ def lambdaSearch(l_min, l_max, testing_points, cycles):
 
 
 def main():
-    X_train, Y_train, y_train = loadBatchNP("data_batch_1")
-    X_val, Y_val, y_val = loadBatchNP("data_batch_2")
+    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
     X_test, Y_test, y_test = loadBatchNP("test_batch")
-    X_train = preProcess(X_train)
-    X_val = preProcess(X_val)
     X_test = preProcess(X_test)
     # W, b = initialize_weight_bias()
     # print("Hidden layer", hidden_nodes_per_layer)
@@ -294,17 +292,21 @@ def main():
     # for i in range(len(W)):
     #     print("W", W[i].shape)
     #     print("b", b[i].shape)
+    lambda_ = 0.005
+    n_batch = 100
+    n_s = int(5 * 45000/n_batch)
 
-    miniBatchGDCyclic(X_train, Y_train, y_train, .01, X_val, Y_val, y_val, 1, 500, plotFig=True)
-    miniBatchGDCyclic(X_train, Y_train, y_train, .01, X_val, Y_val, y_val, 3, 800, plotFig=True)
-
-    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
-    best_lambda = lambdaSearch(-1, -5, 8, 2)
-    print(np.log10(best_lambda))
-    best_lambda = lambdaSearch(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)
-    print(np.log10(best_lambda))
-    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, best_lambda, X_val, Y_val, y_val, 3, 1800, plotFig=True)
+    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=True)
     print(computeAccuracy(X_test, y_test, W, b))
+    # miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val,2, 800, plotFig=True)
+
+    # X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    # best_lambda = lambdaSearch(-1, -5, 8, 2)
+    # print(np.log10(best_lambda))
+    # best_lambda = lambdaSearch(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)
+    # print(np.log10(best_lambda))
+    # W, b = miniBatchGDCyclic(X_train, Y_train, y_train, best_lambda, X_val, Y_val, y_val, 3, 1800, plotFig=True)
+    # print(computeAccuracy(X_test, y_test, W, b))
 
 
 if __name__ == "__main__":

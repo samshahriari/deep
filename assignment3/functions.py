@@ -48,19 +48,20 @@ def ComputeGradsNum(X, Y, P, W, b, lambda_, h):
     return grad_W, grad_b
 
 
-def ComputeGradsNumSlow(X, Y, P, W, b, lambda_, h):
+def ComputeGradsNumSlow(X, Y, P, W, b, lambda_, h, gamma=None, beta=None, mu=None, v=None):
     grad_W = [np.zeros(W_i.shape) for W_i in W]
     grad_b = [np.zeros(b_i.shape) for b_i in b]
+
 
     for l in range(len(b)):
         for i in range(len(b[l])):
             b_try = [b_i.copy() for b_i in b]
             b_try[l][i] -= h
-            c1 = computeCost(X, Y, W, b_try, lambda_)
+            c1 = computeCost(X, Y, W, b_try, lambda_, gamma, beta, mu, v)
 
             b_try = [b_i.copy() for b_i in b]
             b_try[l][i] += h
-            c2 = computeCost(X, Y, W, b_try, lambda_)
+            c2 = computeCost(X, Y, W, b_try, lambda_, gamma, beta, mu, v)
 
             grad_b[l][i] = (c2 - c1) / (2 * h)
 
@@ -69,15 +70,51 @@ def ComputeGradsNumSlow(X, Y, P, W, b, lambda_, h):
             for j in range(W[l].shape[1]):
                 W_try = copy.deepcopy(W)
                 W_try[l][i, j] -= h
-                c1 = computeCost(X, Y, W_try, b, lambda_)
+                c1 = computeCost(X, Y, W_try, b, lambda_, gamma, beta, mu, v)
 
                 W_try = copy.deepcopy(W)
                 W_try[l][i, j] += h
-                c2 = computeCost(X, Y, W_try, b, lambda_)
+                c2 = computeCost(X, Y, W_try, b, lambda_, gamma, beta, mu, v)
 
                 grad_W[l][i, j] = (c2-c1) / (2*h)
+    if gamma is None:
+        return grad_W, grad_b
 
-    return grad_W, grad_b
+    grad_gamma = [np.zeros(gamma_i.shape) for gamma_i in gamma]
+    grad_beta = [np.zeros(beta_i.shape) for beta_i in beta]
+    # gamma = gamma.reshape(-1, 1)
+    # beta = beta.reshape(-1, 1)
+    # print("längd W", len(W))
+
+    for l in range(len(gamma)):
+        for i in range(gamma[l].shape[0]):
+            gamma_try = copy.deepcopy(gamma)
+            gamma_try[l][i] -= h
+            c1 = computeCost(X, Y, W, b, lambda_, gamma_try, beta, mu, v)
+
+            gamma_try = copy.deepcopy(gamma)
+            gamma_try[l][i] += h
+            c2 = computeCost(X, Y, W, b, lambda_, gamma_try, beta, mu, v)
+
+            grad_gamma[l][i] = (c2-c1) / (2*h)
+    for l in range(len(beta)):
+        for i in range(beta[l].shape[0]):
+            beta_try = copy.deepcopy(beta)
+            # print("orig", beta_try[l][i])
+            beta_try[l][i] -= h
+            # print(beta_try[l][i])
+            c1 = computeCost(X, Y, W, b, lambda_, gamma, beta_try, mu, v)
+            # print(c1)
+
+            beta_try = copy.deepcopy(beta)
+            beta_try[l][i] += h
+            # print(beta_try[l][i])
+            c2 = computeCost(X, Y, W, b, lambda_, gamma, beta_try, mu, v)
+            # print(c2)
+
+            grad_beta[l][i] = (c2-c1) / (2*h)
+
+    return grad_W, grad_b, grad_gamma, grad_beta
 
 
 def montage(W):

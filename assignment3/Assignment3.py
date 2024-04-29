@@ -1,4 +1,5 @@
 # from functions import *
+import os
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -8,8 +9,9 @@ NUM_IMAGES = 10000
 DIMENSION = 32*32*3  # 3072
 M_HIDDEN_NODES = 50
 np.random.seed(2424)
-# hidden_nodes_per_layer = [50, 50]
-hidden_nodes_per_layer = [50, 30, 20, 20, 10, 10, 10, 10]
+hidden_nodes_per_layer = [50, 50]
+# hidden_nodes_per_layer = [13, 30]
+# hidden_nodes_per_layer = [50]
 
 eta_min = 1e-5
 eta_max = 1e-1
@@ -50,53 +52,129 @@ def preProcess(X: np.ndarray) -> np.ndarray:
     return X
 
 
-def evaluateClassifier(X: np.ndarray, W: np.ndarray, b):
+def batchNormalize(s, mu, v):
+
+    return np.diag(1 / np.sqrt(v + np.finfo(float).eps)) @ (s - mu.reshape(-1, 1))
+
+
+def evaluateClassifier(X, W, b, gamma=None, beta=None, mu_comp=None, v_comp=None):
+    # """
+    # Forward pass
+    # return p, x, s, s_hat, mu, v
+    # """
     from functions import softmax
+    # print(X)
     x = [X]
-    for l in range(len(hidden_nodes_per_layer)):
-        s = W[l] @ x[-1] + b[l]
-        x.append(np.maximum(0, s))
 
-    s = W[-1] @ x[-1] + b[-1]
+    if gamma is None:
+        for l in range(len(hidden_nodes_per_layer)):
+            s = W[l] @ x[-1] + b[l]
+            x.append(np.maximum(0, s))
 
-    p = softmax(s)
-    return p, x
+        s = W[-1] @ x[-1] + b[-1]
+
+        p = softmax(s)
+        return p, x
+
+    else:
+        s, mu, v, s_hat, s_tilde = [], [], [], [], []
+
+        for l in range(len(hidden_nodes_per_layer)):
+            s.append(W[l] @ x[-1] + b[l])
+            if mu_comp is None:
+                mu.append(np.mean(s[-1], axis=1))
+                v.append(np.var(s[-1], axis=1, ddof=0))
+            else:
+                mu.append(mu_comp[l])
+                v.append(v_comp[l])
+            s_hat.append(batchNormalize(s[-1], mu[-1], v[-1]))
+            s_tilde.append(gamma[l] * s_hat[-1] + beta[l])
+            x.append(np.maximum(0, s_tilde[-1]))
+
+        s.append(W[-1] @ x[-1] + b[-1])
+
+        p = softmax(s[-1])
+        return p, x, s, s_hat, mu, v
 
 
-def computeLoss(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_):
-    p, h = evaluateClassifier(X, W, b)
+def computeLoss(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_, gamma, beta, mu, v):
+    a = evaluateClassifier(X, W, b, gamma, beta, mu, v)
+    p = a[0]
     return np.sum(-Y * np.log(p))/X.shape[1]
 
 
 # vi vill minimera kostnaden för att få så bra parametrar som möjligt
-def computeCost(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_) -> float:
+def computeCost(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_, gamma=None, beta=None, mu=None, v=None) -> float:  # TODO
     reg_cost = 0
     for Wl in W:
         reg_cost += np.sum(Wl**2)
-    return computeLoss(X, Y, W, b, lambda_) + lambda_ * reg_cost
+    return computeLoss(X, Y, W, b, lambda_, gamma, beta, mu, v) + lambda_ * reg_cost
 
 
 def computeAccuracy(X, y, W, b):
-    p, _ = evaluateClassifier(X, W, b)
+    a = evaluateClassifier(X, W, b)
+    p = a[0]
     prediction = p.argmax(axis=0)
     return np.mean(prediction == y)
 
 
 # gradienten talar om oss vilket håll som är den största maximeringen, negativa den blir då den största minimieringen.
-def computeGradients(X: np.ndarray, Y: np.ndarray, P: np.ndarray,  W: np.ndarray, b, lambda_):
+def computeGradients(X: np.ndarray, Y: np.ndarray, P: np.ndarray,  W: np.ndarray, b, lambda_, gamma=None, beta=None, s=None, s_hat=None, mu=None, v=None):
     size_batch = X[0].shape[1]
+
     G = -(Y - P)
-    dL_dW = [None] * (len(hidden_nodes_per_layer) + 1)
-    dL_db = [None] * (len(hidden_nodes_per_layer) + 1)
-    for l in range(len(hidden_nodes_per_layer), 0, -1):
-        # print("layer", l)
-        dL_dW[l] = 1 / size_batch * G @ X[l].T + 2*lambda_*W[l]
-        dL_db[l] = 1 / size_batch * G @ np.ones((size_batch, 1))
-        G = W[l].T@G
-        G = G * (X[l] > 0)
-    dL_dW[0] = 1 / size_batch * G @ X[0].T + 2*lambda_*W[0]
-    dL_db[0] = 1 / size_batch * G @ np.ones((size_batch, 1))
-    return dL_dW, dL_db
+    ones = np.ones((size_batch, 1))
+
+    if gamma is None:
+        dL_dW = [None] * (len(hidden_nodes_per_layer) + 1)
+        dL_db = [None] * (len(hidden_nodes_per_layer) + 1)
+        for l in range(len(hidden_nodes_per_layer), 0, -1):
+            dL_dW[l] = 1 / size_batch * G @ X[l].T + 2*lambda_*W[l]
+            dL_db[l] = 1 / size_batch * G @ ones
+            G = W[l].T@G
+            G = G * (X[l] > 0)
+        dL_dW[0] = 1 / size_batch * G @ X[0].T + 2*lambda_*W[0]
+        dL_db[0] = 1 / size_batch * G @ ones
+        return dL_dW, dL_db
+    else:
+        # k = len(hidden_nodes_per_layer) +1
+        grad_W = [None] * (len(hidden_nodes_per_layer) + 1)
+        grad_b = [None] * (len(hidden_nodes_per_layer) + 1)
+        grad_gamma = [None] * (len(hidden_nodes_per_layer))
+        grad_beta = [None] * (len(hidden_nodes_per_layer))
+
+        grad_W[-1] = 1 / size_batch * G @ X[len(hidden_nodes_per_layer)].T + 2*lambda_*W[-1]
+        grad_b[-1] = 1 / size_batch * G @ ones
+        G = W[-1].T @ G
+        G = G * (X[-1] > 0)
+        for l in range(len(hidden_nodes_per_layer) - 1, -1, -1):
+            grad_gamma[l] = 1/size_batch * (G * s_hat[l]) @ ones
+            grad_beta[l] = 1 / size_batch * G @ ones
+            G = G*([gamma[l]] @ ones.T)  # 26
+            G = batchNormBackPass(G, s[l], mu[l], v[l], size_batch)
+            grad_W[l] = 1 / size_batch * G @ X[l].T + 2*lambda_*W[l]
+            grad_b[l] = 1 / size_batch * G @ ones
+            G = W[l].T@G
+            G = G * (X[l] > 0)
+        return grad_W, grad_b, grad_gamma, grad_beta
+
+
+def batchNormBackPass(G, s, mu, v, n):
+    # print(G.shape)
+    ones = np.ones((n, 1))
+    eps = np.finfo(float).eps
+    sigm1 = ((v + eps) ** (-.5)).reshape(-1, 1)
+    sigm2 = ((v + eps) ** (-1.5)).reshape(-1, 1)
+    # print(sigm1.shape)
+    # print(ones.T.shape)
+    G1 = G * ([sigm1] @ ones.T)
+    G2 = G * ([sigm2] @ ones.T)
+    # print(mu)
+    # print(s.shape)
+    D = s - mu.reshape(-1, 1) @ ones.T
+    c = (G2 * D)@ones
+    G = G1 - 1/n*(G1@ones)@ones.T - 1/n*D*(c@ones.T)
+    return G
 
 
 def relativError(v1, v2):
@@ -133,6 +211,47 @@ def evaluateGradient(X, Y, W, b):
                 print("SLOW W", "rel wrong", np.sum(rel_slow_W > threshold), "of", len(rel_slow_W.flatten()), "biggest error", np.max(rel_slow_W))
                 print("SLOW b", "abs wrong", np.sum(abs_slow_b > threshold), "of", len(abs_slow_b.flatten()), "biggest error", np.max(abs_slow_b))
                 print("SLOW b", "rel wrong", np.sum(rel_slow_b > threshold), "of", len(rel_slow_b.flatten()), "biggest error", np.max(rel_slow_b))
+
+
+def evaluateGradientBN(X, Y):
+    from functions import ComputeGradsNumSlow
+    num_features = 10
+    W, b, gamma, beta = initialize_weight_bias(True, num_features)
+    batchSize = [10, 100]
+    lambdas = [0, .1, 1]  #
+    threshold = 1e-6
+    for num_points in batchSize:
+        for lambda_ in lambdas:
+            X_batch = X[:num_features, 0:num_points]
+            Y_batch = Y[:, 0:num_points]
+
+            P, H, s, s_hat, mu, v = evaluateClassifier(X_batch, W, b, gamma, beta)
+            analytical_W, analytical_b, analytical_gamma, analytical_beta = computeGradients(H, Y_batch, P, W, b, lambda_, gamma, beta, s, s_hat, mu, v)
+
+            slow_W, slow_b, slow_gamma, slow_beta = ComputeGradsNumSlow(X_batch, Y_batch, P, W, b, lambda_, 1e-6, gamma, beta, None, None)
+            for l in range(len(analytical_b)):
+                abs_slow_W = np.abs(analytical_W[l] - slow_W[l])
+                rel_slow_W = relativError(analytical_W[l], slow_W[l])
+                abs_slow_b = np.abs(analytical_b[l] - slow_b[l])
+                rel_slow_b = relativError(analytical_b[l], slow_b[l])
+
+                print()
+                print("------")
+                print("layer", l)
+                print("num features:", num_features, ", batch size:", num_points, ", lambda: ", lambda_)
+                print("SLOW W", "abs wrong", np.sum(abs_slow_W > threshold), "of", len(abs_slow_W.flatten()), "biggest error", np.max(abs_slow_W))
+                print("SLOW W", "rel wrong", np.sum(rel_slow_W > threshold), "of", len(rel_slow_W.flatten()), "biggest error", np.max(rel_slow_W))
+                print("SLOW b", "abs wrong", np.sum(abs_slow_b > threshold), "of", len(abs_slow_b.flatten()), "biggest error", np.max(abs_slow_b))
+                print("SLOW b", "rel wrong", np.sum(rel_slow_b > threshold), "of", len(rel_slow_b.flatten()), "biggest error", np.max(rel_slow_b))
+                if (l < len(analytical_gamma)):
+                    abs_slow_gamma = np.abs(analytical_gamma[l] - slow_gamma[l])
+                    rel_slow_gamma = relativError(analytical_gamma[l], slow_gamma[l])
+                    abs_slow_beta = np.abs(analytical_beta[l] - slow_beta[l])
+                    rel_slow_beta = relativError(analytical_beta[l], slow_beta[l])
+                    print("SLOW gamma", "abs wrong", np.sum(abs_slow_gamma > threshold), "of", len(abs_slow_gamma.flatten()), "biggest error", np.max(abs_slow_gamma))
+                    print("SLOW gamma", "rel wrong", np.sum(rel_slow_gamma > threshold), "of", len(rel_slow_gamma.flatten()), "biggest error", np.max(rel_slow_gamma))
+                    print("SLOW beta", "abs wrong", np.sum(abs_slow_beta > threshold), "of", len(abs_slow_beta.flatten()), "biggest error", np.max(abs_slow_beta))
+                    print("SLOW beta", "rel wrong", np.sum(rel_slow_beta > threshold), "of", len(rel_slow_beta.flatten()), "biggest error", np.max(rel_slow_beta))
 
 
 def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
@@ -175,7 +294,7 @@ def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
 
 def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=None, b=None, plotFig=False):
     if W == None:
-        W, b = initialize_weight_bias()
+        W, b, gamma, beta = initialize_weight_bias()
 
     eta_min = 1e-5
     eta_max = 1e-1
@@ -204,7 +323,7 @@ def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=No
             j_end = j+batch_size
             X_batch = X[:, ind[j_start:j_end]]
             Y_batch = Y[:, ind[j_start:j_end]]
-            P_batch, H_batch = evaluateClassifier(X_batch, W, b)
+            P_batch, H_batch = evaluateClassifier(X_batch, W, b, gamma, beta)
             grad_W, grad_b = computeGradients(H_batch, Y_batch, P_batch,  W, b, lambda_)
             for i in range(len(W)):
                 W[i] -= eta*grad_W[i]
@@ -249,17 +368,29 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     # plt.show()
 
 
-def initialize_weight_bias(dim=DIMENSION, m=M_HIDDEN_NODES):
+def initialize_weight_bias(use_batch_norm=False, dim=DIMENSION):
     W = []
     b = []
+    gamma = []
+    beta = []
+
     W.append(np.sqrt(2)/np.sqrt(dim)*np.random.randn(hidden_nodes_per_layer[0], dim))
     b.append(np.zeros((hidden_nodes_per_layer[0], 1)))
+
+    gamma.append(np.ones((hidden_nodes_per_layer[0], 1)))
+    beta.append(np.zeros((hidden_nodes_per_layer[0], 1)))
     for l in range(1, len(hidden_nodes_per_layer)):
         W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[l-1]) * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
         b.append(np.zeros((hidden_nodes_per_layer[l], 1)))
+        gamma.append(np.ones((hidden_nodes_per_layer[l], 1)))
+        beta.append(np.zeros((hidden_nodes_per_layer[l], 1)))
     W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[-1])*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
     b.append(np.zeros((NUM_CLASSES, 1)))
-    return W, b
+
+    if not use_batch_norm:
+        return W, b
+
+    return W, b, gamma, beta
 
 
 def lambdaSearch(l_min, l_max, testing_points, cycles):
@@ -285,19 +416,21 @@ def main():
     X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
     X_test, Y_test, y_test = loadBatchNP("test_batch")
     X_test = preProcess(X_test)
-    # W, b = initialize_weight_bias()
-    # print("Hidden layer", hidden_nodes_per_layer)
+    W, b = initialize_weight_bias()
+    print("Hidden layer", hidden_nodes_per_layer)
     # evaluateGradient(X_train, Y_train, W, b)
+    evaluateGradientBN(X_train, Y_train)
+    # evalGrad(X_train[0:20, 0:50], Y_train[:, 0:50])
     # W, b = initialize_weight_bias()
     # for i in range(len(W)):
     #     print("W", W[i].shape)
     #     print("b", b[i].shape)
-    lambda_ = 0.005
-    n_batch = 100
-    n_s = int(5 * 45000/n_batch)
+    # lambda_ = 0.005
+    # n_batch = 100
+    # n_s = int(5 * 45000/n_batch)
 
-    W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=True)
-    print(computeAccuracy(X_test, y_test, W, b))
+    # W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=False)
+    # print(computeAccuracy(X_test, y_test, W, b)) # TODO
     # miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val,2, 800, plotFig=True)
 
     # X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()

@@ -10,6 +10,8 @@ DIMENSION = 32*32*3  # 3072
 M_HIDDEN_NODES = 50
 np.random.seed(2424)
 hidden_nodes_per_layer = [50, 50]
+# hidden_nodes_per_layer = [50, 30, 20, 20, 10, 10, 10, 10]
+
 # hidden_nodes_per_layer = [13, 30]
 # hidden_nodes_per_layer = [50]
 
@@ -19,7 +21,7 @@ n_s = 500
 batch_size = 100
 
 
-def loadBatchNP(batch_name: str) -> list[np.ndarray, np.ndarray, np.ndarray]:
+def loadBatchNP(batch_name: str):
     from functions import LoadBatch
     """
     - X is d*n
@@ -58,12 +60,11 @@ def batchNormalize(s, mu, v):
 
 
 def evaluateClassifier(X, W, b, gamma=None, beta=None, mu_comp=None, v_comp=None):
-    # """
-    # Forward pass
-    # return p, x, s, s_hat, mu, v
-    # """
+    """
+    Forward pass
+    return p, x, s, s_hat, mu, v
+    """
     from functions import softmax
-    # print(X)
     x = [X]
 
     if gamma is None:
@@ -97,7 +98,7 @@ def evaluateClassifier(X, W, b, gamma=None, beta=None, mu_comp=None, v_comp=None
         return p, x, s, s_hat, mu, v
 
 
-def computeLoss(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_, gamma, beta, mu, v):
+def computeLoss(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_, gamma=None, beta=None, mu=None, v=None):
     a = evaluateClassifier(X, W, b, gamma, beta, mu, v)
     p = a[0]
     return np.sum(-Y * np.log(p))/X.shape[1]
@@ -111,8 +112,8 @@ def computeCost(X: np.ndarray, Y: np.ndarray, W: np.ndarray, b, lambda_, gamma=N
     return computeLoss(X, Y, W, b, lambda_, gamma, beta, mu, v) + lambda_ * reg_cost
 
 
-def computeAccuracy(X, y, W, b):
-    a = evaluateClassifier(X, W, b)
+def computeAccuracy(X, y, W, b, gamma=None,  beta=None, mu_av=None, v_av=None):
+    a = evaluateClassifier(X, W, b, gamma,  beta, mu_av, v_av)
     p = a[0]
     prediction = p.argmax(axis=0)
     return np.mean(prediction == y)
@@ -123,6 +124,7 @@ def computeGradients(X: np.ndarray, Y: np.ndarray, P: np.ndarray,  W: np.ndarray
     size_batch = X[0].shape[1]
 
     G = -(Y - P)
+    # print(G.shape)
     ones = np.ones((size_batch, 1))
 
     if gamma is None:
@@ -156,6 +158,8 @@ def computeGradients(X: np.ndarray, Y: np.ndarray, P: np.ndarray,  W: np.ndarray
             grad_b[l] = 1 / size_batch * G @ ones
             G = W[l].T@G
             G = G * (X[l] > 0)
+        # print(grad_W[-1].shape)
+        # print(grad_W[-2].shape)
         return grad_W, grad_b, grad_gamma, grad_beta
 
 
@@ -174,7 +178,8 @@ def batchNormBackPass(G, s, mu, v, n):
     D = s - mu.reshape(-1, 1) @ ones.T
     c = (G2 * D)@ones
     G = G1 - 1/n*(G1@ones)@ones.T - 1/n*D*(c@ones.T)
-    return G
+    # print("shape", G.shape)
+    return G[0]
 
 
 def relativError(v1, v2):
@@ -292,9 +297,8 @@ def miniBatchGD(X, Y, n_batch, eta, n_epochs, W, b, lambda_, X_test, Y_test):
     return W, b
 
 
-def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=None, b=None, plotFig=False):
-    if W == None:
-        W, b, gamma, beta = initialize_weight_bias()
+def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, plotFig=False, sigm=None):
+    W, b, = initialize_weight_bias(contantSigm=sigm)
 
     eta_min = 1e-5
     eta_max = 1e-1
@@ -323,7 +327,7 @@ def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=No
             j_end = j+batch_size
             X_batch = X[:, ind[j_start:j_end]]
             Y_batch = Y[:, ind[j_start:j_end]]
-            P_batch, H_batch = evaluateClassifier(X_batch, W, b, gamma, beta)
+            P_batch, H_batch = evaluateClassifier(X_batch, W, b)
             grad_W, grad_b = computeGradients(H_batch, Y_batch, P_batch,  W, b, lambda_)
             for i in range(len(W)):
                 W[i] -= eta*grad_W[i]
@@ -343,14 +347,83 @@ def miniBatchGDCyclic(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, W=No
                 l += 1
 
     if plotFig:
-        plot(x_axes, cost_training, cost_val, "cost", n_s, l_cycles)
-        plot(x_axes, loss_training, loss_val, "loss", n_s, l_cycles)
-        plot(x_axes, accuracy_training, accuracy_val, "accuracy", n_s, l_cycles)
+        # plot(x_axes, cost_training, cost_val, "cost", n_s, l_cycles)
+        plot(x_axes, loss_training, loss_val, "loss", n_s, l_cycles, sig=sigm)
+        # plot(x_axes, accuracy_training, accuracy_val, "accuracy", n_s, l_cycles)
 
     return W, b
 
 
-def plot(x, y_train, y_val, title: str, n_s, l):
+def miniBatchGDCyclicBN(X, Y, y, lambda_, X_val, Y_val, y_val, l_cycles, n_s, plotFig=False, sigm=None):
+    W, b, gamma, beta = initialize_weight_bias(use_batch_norm=True)
+    alpha = 0.5
+    mu_av = None
+    v_av = None
+
+    eta_min = 1e-5
+    eta_max = 1e-1
+    batch_size = 100
+    cost_training = []
+    cost_val = []
+    loss_training = []
+    loss_val = []
+    accuracy_training = []
+    accuracy_val = []
+    x_axes = []
+    eta = eta_min
+    l = 0
+    t = 0
+    # for epoch in range(n_epochs):
+    while l < l_cycles:
+        ind = np.random.permutation(X.shape[1])  # shuffle the training samples
+        for j in range(0, X.shape[1], batch_size):
+            if 2*l*n_s <= t and t <= (2*l+1)*n_s:
+                eta = eta_min + (t-2*l*n_s)/n_s*(eta_max-eta_min)
+            else:
+                eta = eta_max - (t-(2*l+1)*n_s)/n_s*(eta_max-eta_min)
+
+            j_start = j
+            j_end = j+batch_size
+            X_batch = X[:, ind[j_start:j_end]]
+            Y_batch = Y[:, ind[j_start:j_end]]
+            P_batch, H_batch, S_batch, S_hat_batch, mu_batch, v_batch = evaluateClassifier(X_batch, W, b, gamma, beta)
+            if mu_av is None:
+                mu_av, v_av = mu_batch, v_batch
+            else:
+                for i in range(len(mu_av)):
+                    mu_av[i] = alpha * mu_av[i] + (1-alpha) * mu_batch[i]
+                    v_av[i] = alpha * v_av[i] + (1-alpha) * v_batch[i]
+
+            grad_W, grad_b, grad_gamma, grad_beta = computeGradients(H_batch, Y_batch, P_batch,  W, b, lambda_, gamma, beta, S_batch, S_hat_batch, mu_av, v_av)
+            for i in range(len(W)):
+                W[i] -= eta*grad_W[i]  # [0]  # has one extra axis
+                b[i] -= eta*grad_b[i]  # [0]
+            for i in range(len(gamma)):
+                gamma[i] -= eta*grad_gamma[i]  # [0]
+                beta[i] -= eta*grad_beta[i]  # [0]
+
+        # print("epoch", epoch, ", cost", computeCost(X, Y, W, b, lambda_))
+            t += 1
+            if plotFig and (t % (2*n_s/10) == 0 or t == 1):
+                cost_training.append(computeCost(X, Y, W, b, lambda_, gamma, beta, mu_av, v_av))
+                cost_val.append(computeCost(X_val, Y_val, W, b, lambda_, gamma, beta, mu_av, v_av))
+                loss_training.append(computeLoss(X, Y, W, b, lambda_, gamma, beta, mu_av, v_av))
+                loss_val.append(computeLoss(X_val, Y_val, W, b, lambda_, gamma, beta, mu_av, v_av))
+                accuracy_training.append(computeAccuracy(X, y, W, b, gamma, beta, mu_av, v_av))
+                accuracy_val.append(computeAccuracy(X_val, y_val, W, b, gamma, beta, mu_av, v_av))
+                x_axes.append(t)
+            if t % (2*n_s) == 0:
+                l += 1
+
+    if plotFig:
+        # plot(x_axes, cost_training, cost_val, "cost", n_s, l_cycles, True)
+        plot(x_axes, loss_training, loss_val, "loss", n_s, l_cycles, True, sig=sigm)
+        # plot(x_axes, accuracy_training, accuracy_val, "accuracy", n_s, l_cycles, True)
+
+    return W, b, gamma, beta, mu_av, v_av
+
+
+def plot(x, y_train, y_val, title: str, n_s, l, bn=False, sig=None):
     import matplotlib.pyplot as plt
     from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
     plt.clf()
@@ -362,29 +435,40 @@ def plot(x, y_train, y_val, title: str, n_s, l):
     plt.plot(x, y_val, label=f"{title} validation")
     plt.legend()
     plt.ylim(bottom=0)
-    plt.title(f"{title.capitalize()} plot")
-    plt.savefig(f'results/{l}-{n_s}-{len(hidden_nodes_per_layer)+1}-{title}.png')
+    plt.title(f"{title.capitalize()} plot, BN={bn}")
+    plt.savefig(f'results/{l}-{n_s}-{len(hidden_nodes_per_layer)+1}-{title}-{bn}-{sig}.png')
     # plt.savefig(f'results/{l}-{n_s}-{len(hidden_nodes_per_layer)+1}-{title}.pgf')
     # plt.show()
 
 
-def initialize_weight_bias(use_batch_norm=False, dim=DIMENSION):
+def initialize_weight_bias(use_batch_norm=False, dim=DIMENSION, contantSigm=None):
     W = []
     b = []
     gamma = []
     beta = []
 
-    W.append(np.sqrt(2)/np.sqrt(dim)*np.random.randn(hidden_nodes_per_layer[0], dim))
+    sqrt = 2
+
+    if contantSigm is not None:
+        W.append(contantSigm*np.random.randn(hidden_nodes_per_layer[0], dim))
+    else:
+        W.append(np.sqrt(sqrt)/np.sqrt(dim)*np.random.randn(hidden_nodes_per_layer[0], dim))
     b.append(np.zeros((hidden_nodes_per_layer[0], 1)))
 
     gamma.append(np.ones((hidden_nodes_per_layer[0], 1)))
     beta.append(np.zeros((hidden_nodes_per_layer[0], 1)))
     for l in range(1, len(hidden_nodes_per_layer)):
-        W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[l-1]) * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
+        if contantSigm is not None:
+            W.append(contantSigm * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
+        else:
+            W.append(np.sqrt(sqrt)/np.sqrt(hidden_nodes_per_layer[l-1]) * np.random.randn(hidden_nodes_per_layer[l], hidden_nodes_per_layer[l-1]))
         b.append(np.zeros((hidden_nodes_per_layer[l], 1)))
         gamma.append(np.ones((hidden_nodes_per_layer[l], 1)))
         beta.append(np.zeros((hidden_nodes_per_layer[l], 1)))
-    W.append(np.sqrt(2)/np.sqrt(hidden_nodes_per_layer[-1])*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
+    if contantSigm is not None:
+        W.append(contantSigm*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
+    else:
+        W.append(np.sqrt(sqrt)/np.sqrt(hidden_nodes_per_layer[-1])*np.random.randn(NUM_CLASSES, hidden_nodes_per_layer[-1]))
     b.append(np.zeros((NUM_CLASSES, 1)))
 
     if not use_batch_norm:
@@ -412,34 +496,53 @@ def lambdaSearch(l_min, l_max, testing_points, cycles):
     return res[0][1]
 
 
+def lambdaSearchBN(l_min, l_max, testing_points, cycles):
+    X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    n_batch = 100
+    n_s = 2 * np.floor(X_train.shape[1]/n_batch)
+    l = l_min + (l_max - l_min) * np.random.rand(testing_points)
+    lambdas = np.power(10, l)
+
+    res = []
+    for lambda_ in lambdas:
+
+        W, b, gamma, beta, mu_av, v_av = miniBatchGDCyclicBN(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, cycles, n_s)
+        acc = computeAccuracy(X_val, y_val, W, b, gamma, beta, mu_av, v_av)
+        res.append((acc, lambda_))
+    res.sort(reverse=True)
+    for (acc, lam) in res:
+        print("Accuracy", acc, "lambda", lam, "log lambda", np.log10(lam))
+    return res[0][1]
+
+
 def main():
     X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
     X_test, Y_test, y_test = loadBatchNP("test_batch")
     X_test = preProcess(X_test)
-    W, b = initialize_weight_bias()
-    print("Hidden layer", hidden_nodes_per_layer)
+    # print("Hidden layer", hidden_nodes_per_layer)
     # evaluateGradient(X_train, Y_train, W, b)
-    evaluateGradientBN(X_train, Y_train)
-    # evalGrad(X_train[0:20, 0:50], Y_train[:, 0:50])
-    # W, b = initialize_weight_bias()
+    # evaluateGradientBN(X_train, Y_train)
+    # # W, b = initialize_weight_bias()
     # for i in range(len(W)):
     #     print("W", W[i].shape)
     #     print("b", b[i].shape)
-    # lambda_ = 0.005
-    # n_batch = 100
-    # n_s = int(5 * 45000/n_batch)
+    lambda_ = 0.005
+    n_batch = 100
+    n_s = int(5 * 45000/n_batch)
 
-    # W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=False)
-    # print(computeAccuracy(X_test, y_test, W, b)) # TODO
-    # miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val,2, 800, plotFig=True)
+    for sig in [1e-1, 1e-3, 1e-4]:
+        W, b = miniBatchGDCyclic(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=True, sigm=sig)
+        print("No BN", sig, computeAccuracy(X_test, y_test, W, b))
+        W, b, gamma, beta, mu_av, v_av = miniBatchGDCyclicBN(X_train, Y_train, y_train, lambda_, X_val, Y_val, y_val, 2, n_s, plotFig=True, sigm=sig)
+        print("BN", sig, computeAccuracy(X_test, y_test, W, b, gamma, beta, mu_av, v_av))
 
-    # X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
-    # best_lambda = lambdaSearch(-1, -5, 8, 2)
+    # # X_train, Y_train, y_train, X_val, Y_val, y_val = loadAllTrainingData()
+    # best_lambda = lambdaSearchBN(-1, -5, 8, 2)
     # print(np.log10(best_lambda))
-    # best_lambda = lambdaSearch(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)
+    # best_lambda = lambdaSearchBN(np.log10(best_lambda)+1, np.log10(best_lambda)-1, 20, 2)
     # print(np.log10(best_lambda))
-    # W, b = miniBatchGDCyclic(X_train, Y_train, y_train, best_lambda, X_val, Y_val, y_val, 3, 1800, plotFig=True)
-    # print(computeAccuracy(X_test, y_test, W, b))
+    # W, b, gamma, beta, mu_av, v_av = miniBatchGDCyclicBN(X_train, Y_train, y_train, best_lambda, X_val, Y_val, y_val, 3, n_s, plotFig=True)
+    # print(computeAccuracy(X_test, y_test, W, b, gamma, beta, mu_av, v_av))
 
 
 if __name__ == "__main__":

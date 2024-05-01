@@ -52,7 +52,6 @@ def ComputeGradsNumSlow(X, Y, P, W, b, lambda_, h, gamma=None, beta=None, mu=Non
     grad_W = [np.zeros(W_i.shape) for W_i in W]
     grad_b = [np.zeros(b_i.shape) for b_i in b]
 
-
     for l in range(len(b)):
         for i in range(len(b[l])):
             b_try = [b_i.copy() for b_i in b]

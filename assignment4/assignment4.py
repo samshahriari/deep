@@ -15,8 +15,9 @@ class RNN:
             if c not in self.c2i:
                 self.c2i[c] = len(self.i2c)
                 self.i2c.append(c)
+        self.encoded_book_data = [self.c2i[c] for c in self.book_data]
         self.K = len(self.i2c)
-        self.m = 5
+        self.m = 100
         self.eta = .1
         self.seq_length = 25
         self.RNN = {}
@@ -42,7 +43,6 @@ class RNN:
         return np.exp(x) / np.sum(np.exp(x), axis=0)
 
     def onehot(self, c=None, i=None):
-        print(i)
         if c is not None:
             x = np.zeros((self.K))
             x[self.c2i[c]] = 1
@@ -52,10 +52,10 @@ class RNN:
             x[i] = 1
             return x
 
-    def synthesize(self, n, x0=None):
-        if x0 == None:
+    def synthesize(self, n, h0, x0=None):
+        if x0 is None:
             x0 = self.onehot(c=".")
-        h = [self.h0]
+        h = [h0]
         x = [x0]
         a = np.zeros((n, self.m))
         o = np.zeros((n, self.K))
@@ -82,24 +82,24 @@ class RNN:
             Y.append(ii)
         return Y
 
-    def forward_pass(self, X, Y, RNN=None):
+    def forward_pass(self, X, Y, hprev, RNN=None, ):
         if RNN is None:
             RNN = self.RNN
-        h = [self.h0]
+        h = [hprev]
         a = np.zeros((X.shape[1], self.m))
         o = np.zeros((X.shape[1], self.K))
         p = np.zeros((X.shape[1], self.K))
         for t in range(X.shape[1]):
             a[t] = ((RNN["W"] @ h[-1]) + (RNN["U"] @ X[:, t]) + RNN["b"])
             h.append(np.tanh(a[t]))
-            print((self.RNN["V"]@h[-1]).shape)
-            print(self.RNN["c"].shape)
+            # print((self.RNN["V"]@h[-1]).shape)
+            # print(self.RNN["c"].shape)
             o[t] = RNN["V"]@h[-1] + RNN["c"]
             p[t] = self.softmax(o[t])
 
         return -np.sum(Y.T*np.log(p)), o, h[1:], p
 
-    def backward_pass(self, X, Y, p, h):
+    def backward_pass(self, X, Y, p, h, h0):
         self.grads = {}
         self.grads["V"] = np.zeros_like(self.RNN["V"])
         self.grads["c"] = np.zeros_like(self.RNN["c"])
@@ -116,7 +116,7 @@ class RNN:
                 grad_h_t = grad_o_t @ self.RNN["V"] + grad_a_t @ self.RNN["W"]
             grad_a_t = grad_h_t @ np.diag(1 - h[t]**2)
             if t == 0:
-                self.grads["W"] += np.outer(grad_a_t, self.h0)
+                self.grads["W"] += np.outer(grad_a_t, h0)
             else:
                 self.grads["W"] += np.outer(grad_a_t, h[t-1])
             self.grads["U"] += np.outer(grad_a_t, X[:, t])
@@ -133,7 +133,7 @@ class RNN:
             print(f, "max : ", np.max(np.abs(diff)))
 
     def ComputeLoss(self, RNN=None):
-        return self.forward_pass(self.X, self.Y, RNN)[0]
+        return self.forward_pass(self.X, self.Y, self.h0, RNN)[0]
 
     def ComputeGradNum(self, f, h):
         import copy
@@ -168,12 +168,63 @@ class RNN:
         return grad
 
     def train(self):
-        pass
+        epoch = 1
+        iteration = 0
+        smooth_loss = self.ComputeLoss()
+        iters = [iteration]
+        losses = [smooth_loss]
+        m = {}
+        for f in self.RNN.keys():
+            m[f] = np.zeros_like(self.RNN[f])
+        while epoch <= 2:
+            e = 0
+            h0 = np.zeros((self.m))
+            while e < len(self.book_data)-self.seq_length:
+                X_chars = self.book_data[e:e+self.seq_length]
+                Y_chars = self.book_data[e+1:e+self.seq_length+1]
+                X = np.zeros((self.K, self.seq_length))
+                for i, j in enumerate(X_chars):
+                    X[self.c2i[j], i] = 1
+                Y = np.zeros((self.K, self.seq_length))
+                for i, j in enumerate(Y_chars):
+                    Y[self.c2i[j], i] = 1
+                loss, o, h, p = self.forward_pass(X, Y, h0)
+                self.backward_pass(X, Y, p, h, h0)
+                h0 = h[-1]
+                smooth_loss = .999*smooth_loss + 0.001*loss
+                if iteration % 1000 == 0:
+                    print("iter", iteration, ", epoch", epoch, ", smooth loss", smooth_loss)
+                    losses.append(smooth_loss)
+                    iters.append(iteration)
+                # if iteration % 500 == 0:
+                #     story = r.synthesize(200, h0, X[:, 0])
+                #     for c in story:
+                #         print(r.i2c[c], end="")
+                #     print()
+
+                e += self.seq_length
+
+                # ADA grad
+                for f in self.RNN.keys():
+                    m[f] += self.grads[f]**2
+                    self.RNN[f] -= self.eta/np.sqrt(m[f] + 1e-15)*self.grads[f]
+                iteration += 1
+            epoch += 1
+
+        import matplotlib.pyplot as plt
+        plt.plot(iters, losses, label="smooth loss")
+        plt.xlabel('iteration')
+        plt.ylabel('smooth loss')
+        plt.legend()
+        plt.title(f"smooth loss over two epochs")
+        plt.grid(True)
+        plt.savefig("smooth_loss.png")
 
 
 if __name__ == "__main__":
     r = RNN("goblet_book.txt")
     # r.compare_grads()
-    story = r.synthesize(100)
-    for c in story:
-        print(r.i2c[c], end="")
+    r.train()
+    # story = r.synthesize(100)
+    # for c in story:
+    #     print(r.i2c[c], end="")
